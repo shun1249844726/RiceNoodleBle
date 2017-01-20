@@ -1,21 +1,16 @@
 package com.qiantao.rxble;
 
-import android.bluetooth.BluetoothDevice;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
-import android.text.TextUtils;
-import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.TextView;
 
-import com.qiantao.rxble.ble.RxBle;
-
 import butterknife.BindView;
 import butterknife.ButterKnife;
-import butterknife.OnClick;
-import butterknife.OnTextChanged;
-import rx.functions.Action1;
+
+import static com.qiantao.rxble.Tools.mRxBle;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -24,54 +19,98 @@ public class MainActivity extends AppCompatActivity {
 
     @BindView(R.id.et_send)
     EditText sendEt;
+    @BindView(R.id.amount_view_mode1)
+    AmountView amountViewMode_A;
+    @BindView(R.id.amount_view_mode2)
+    AmountView amountViewMode_B;
+    @BindView(R.id.tv_log)
+    TextView logTv;
 
-    private String mMsgSend;
+    private static int aModeNum = 0;
+    private static int bModeNum = 0;
 
-    private static final String TAG = MainActivity.class.getSimpleName();
-
-    private RxBle mRxBle;
-
-    private StringBuffer mStringBuffer;
+    private SharedPreferences preferences;
+    private SharedPreferences.Editor editor;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
-        mStringBuffer = new StringBuffer();
-        mRxBle = RxBle.getInstance().setTargetDevice("Test");//为名字
-        mRxBle.openBle(this);
-        mRxBle.scanBleDevices(true);
-        mRxBle.receiveData().subscribe(new Action1<String>() {
+
+        if (mRxBle.isConnected()){
+            logTv.setText("连接正常！  ");
+        }
+        else {
+            logTv.setText("未连接设备！");
+        }
+
+        preferences = getSharedPreferences("MODENUMINFO", MODE_PRIVATE);
+        editor = preferences.edit();
+
+        aModeNum = preferences.getInt("AMODENUM",0);
+        bModeNum = preferences.getInt("BMODENUM",0);
+
+        amountViewMode_A.setGoods_storage(255);
+        amountViewMode_B.setGoods_storage(255);
+
+        amountViewMode_A.setCurentGoodsNum(aModeNum);
+        amountViewMode_B.setCurentGoodsNum(bModeNum);
+
+        amountViewMode_A.setOnAmountChangeListener(new AmountView.OnAmountChangeListener() {
             @Override
-            public void call(String receiveData) {
-                sendTv.setText(mStringBuffer.append(receiveData).append("\n"));
+            public void onAmountChange(View view, int amount) {
+                aModeNum = amount;
+                System.out.println("a:   "+ view.getId() + "    "+aModeNum);
+                BleSend(1,amount);
             }
         });
-        mRxBle.setScanListener(new RxBle.BleScanListener() {
+        amountViewMode_B.setOnAmountChangeListener(new AmountView.OnAmountChangeListener() {
             @Override
-            public void onBleScan(BluetoothDevice bleDevice, int rssi, byte[] scanRecord) {
-                // Get list of devices and other information
+            public void onAmountChange(View view, int amount) {
+                bModeNum = amount;
+                System.out.println("b:   "+ view.getId() + "    "+aModeNum);
+
+                BleSend(2,amount);
             }
         });
     }
-
-    @OnClick(R.id.btn_send)
-    public void sendMessage(View view) {
-        if (!TextUtils.isEmpty(mMsgSend)) {
-            Log.d(TAG, "sendMessage: " + mMsgSend);
-            mRxBle.sendData(mMsgSend, 0);
+    private void BleSend(int mode,int num) {
+        if (mRxBle.isConnected()){
+            switch (mode){
+                case 1:
+                    mRxBle.sendData("A:"+num+";");
+                    break;
+                case 2:
+                    mRxBle.sendData("B:"+num+";");
+                    break;
+                default:
+                    break;
+            }
+        }
+        else {
+            logTv.setText("未连接设备！");
         }
     }
 
-    @OnTextChanged(R.id.et_send)
-    public void onTextChanged(CharSequence text) {
-        mMsgSend = text.toString();
-    }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         mRxBle.closeBle();
+
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+
+        editor.clear();
+        editor.putInt("AMODENUM", aModeNum);
+        editor.putInt("BMODENUM", bModeNum);
+        editor.commit();
+
+        System.out.println("onPause:"+aModeNum +"     "+ bModeNum);
+
     }
 }

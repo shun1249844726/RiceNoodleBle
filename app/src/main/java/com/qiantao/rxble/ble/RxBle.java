@@ -17,6 +17,7 @@ import rx.Observable;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.functions.Action1;
 import rx.functions.Func1;
+import rx.schedulers.Schedulers;
 import rx.subjects.PublishSubject;
 import rx.subjects.SerializedSubject;
 import rx.subjects.Subject;
@@ -30,7 +31,7 @@ public class RxBle {
 
     private static final long SCAN_PERIOD = 10000;
     private static final String TAG = RxBle.class.getSimpleName();
-    private static final String UUID = "0000ffe1-0000-1000-8000-00805f9b34fb";
+    private static final String UUID = "0000fff6-0000-1000-8000-00805f9b34fb";
     private Context mContext;
 
     private BluetoothAdapter mBleAdapter;
@@ -40,12 +41,14 @@ public class RxBle {
     private BluetoothGattCharacteristic mBleGattChar;
 
     private Subject<String, String> mBus;
+    public boolean connect_flag = false;
 
     public interface BleScanListener {
         /**
          * Callback in BLE scanning,then you should use the method {@link #connectDevice} to connect target device
-         * @param bleDevice Identifies the remote device
-         * @param rssi The RSSI value for the remote device as reported by the Bluetooth hardware. 0 if no RSSI value is available
+         *
+         * @param bleDevice  Identifies the remote device
+         * @param rssi       The RSSI value for the remote device as reported by the Bluetooth hardware. 0 if no RSSI value is available
          * @param scanRecord The content of the advertisement record offered by the remote device.
          */
         void onBleScan(BluetoothDevice bleDevice, int rssi, byte[] scanRecord);
@@ -55,6 +58,7 @@ public class RxBle {
 
     /**
      * Set listener on device scanning
+     *
      * @param scanListener Listener of scaning
      */
     public void setScanListener(BleScanListener scanListener) {
@@ -93,13 +97,14 @@ public class RxBle {
             Log.d(TAG, "scanBleDevices");
             mIsScanning = true;
             mBleAdapter.startLeScan(mBleScanCallback);
-            Observable.timer(SCAN_PERIOD, TimeUnit.MILLISECONDS).subscribe(new Action1<Long>() {
-                @Override
-                public void call(Long aLong) {
-                    mIsScanning = false;
-                    mBleAdapter.stopLeScan(mBleScanCallback);
-                }
-            });
+            //以下为设置的扫描超时，可以不要。我就给注释了
+//            Observable.timer(SCAN_PERIOD, TimeUnit.MILLISECONDS).subscribe(new Action1<Long>() {
+//                @Override
+//                public void call(Long aLong) {
+//                    mIsScanning = false;
+//                    mBleAdapter.stopLeScan(mBleScanCallback);
+//                }
+//            });
         } else {
             mIsScanning = false;
             mBleAdapter.stopLeScan(mBleScanCallback);
@@ -142,6 +147,18 @@ public class RxBle {
         Log.d(TAG, "connectDevice: start to connect " + mBleGatt.getDevice().getName());
     }
 
+    public void disConnectBle(){
+        if (mBleGatt != null){
+            mBleGatt.disconnect();
+            mBleGatt.close();
+            connect_flag = false;
+        }
+    }
+    // 检查是否连接
+    public boolean isConnected()
+    {
+        return connect_flag;
+    }
     /**
      * Callback after device has been connected
      */
@@ -154,8 +171,11 @@ public class RxBle {
             if (newState == BluetoothGatt.STATE_CONNECTED) {
                 Log.d(TAG, "onConnectionStateChange: device connected");
                 //Discover services will call the next override method: onServicesDiscovered
+
+                connect_flag = true;
                 bleGatt.discoverServices();
             } else if (newState == BluetoothGatt.STATE_DISCONNECTED) {
+                connect_flag = false;
                 Log.d(TAG, "onConnectionStateChange: device disconnected");
             }
         }
@@ -210,6 +230,7 @@ public class RxBle {
      */
     public void sendData(String data) {
         sendData(data, 0);
+
     }
 
     /**
@@ -231,6 +252,8 @@ public class RxBle {
                             mBleGattChar.setValue(data);
                             boolean isSend = mBleGatt.writeCharacteristic(mBleGattChar);
                             Log.d(TAG, "send " + (isSend ? "success" : "fail"));
+
+                            System.out.println("send    ------------------->" + data);
                         }
                     }
                 });
@@ -255,5 +278,41 @@ public class RxBle {
             mBleAdapter.cancelDiscovery();
         }
         mBus.onCompleted();
+    }
+
+    public byte[] getMsg(String msg, int typeFlag) {
+
+        byte[] write_msg_byte = null;
+        byte[] tmp_byte = null;
+        if (0 == msg.length())
+            return null;
+        switch (typeFlag) {
+            case 0:
+                write_msg_byte = msg.getBytes();
+                break;
+            case 1:
+                if (msg.length() == 1) {
+                    msg = "0" + msg;
+                }
+                tmp_byte = msg.getBytes();
+                write_msg_byte = new byte[tmp_byte.length / 2 + tmp_byte.length % 2];
+                for (int i = 0; i < tmp_byte.length; i++) {
+                    if ((tmp_byte[i] <= '9') && (tmp_byte[i] >= '0')) {
+                        if (0 == (i % 2))
+                            write_msg_byte[i / 2] = (byte) (((tmp_byte[i] - '0') * 16) & 0xFF);
+                        else
+                            write_msg_byte[i / 2] |= (byte) ((tmp_byte[i] - '0') & 0xFF);
+                    } else {
+                        if (0 == i % 2)
+                            write_msg_byte[i / 2] = (byte) (((tmp_byte[i] - 'a' + 10) * 16) & 0xFF);
+                        else
+                            write_msg_byte[i / 2] |= (byte) ((tmp_byte[i] - 'a' + 10) & 0xFF);
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+        return write_msg_byte;
     }
 }
