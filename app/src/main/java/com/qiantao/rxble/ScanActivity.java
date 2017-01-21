@@ -18,7 +18,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
-import android.widget.Button;
 import android.widget.ListView;
 import android.widget.TextView;
 
@@ -31,7 +30,6 @@ import java.util.List;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
-import butterknife.OnClick;
 import rx.functions.Action1;
 ;import static com.qiantao.rxble.Tools.mRxBle;
 
@@ -267,7 +265,7 @@ public class ScanActivity extends AppCompatActivity {
             try {
                 //for (int i = 0; i < 10; i++) {
                 while (true) {
-                    for (int j = 0; j < 50; j++) {
+                    for (int j = 0; j < 100; j++) {
                         System.out.println("连接状态：" + mRxBle.isConnected());
 
                         if (mRxBle.isConnected()) {
